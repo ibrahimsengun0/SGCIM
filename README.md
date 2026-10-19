@@ -116,7 +116,8 @@ For reproducibility and detailed visual comparison, all enhancement results are 
 
 ## Visual Comparison with SOTA Methods
 
-![visual_comp](figures\visual_comp.png)
+![visual_no_ref_comp](figures/comp_no_ref.png)
+![visual_ref_comp](figures/comp_ref.png)
 
 
 ## Quantitative Results on Referenced Low-Light Datasets
