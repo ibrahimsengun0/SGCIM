@@ -5,12 +5,14 @@ import torch
 from eval import (
     DEVICE,
     DEFAULT_REFERENCE_METRICS,
+    DEFAULT_NO_REFERENCE_METRICS,
     init_reference_metrics,
     init_no_reference_metrics,
     list_images,
     load_image_rgb,
     to_tensor,
     safe_mean,
+    safe_std,
     print_table,
 )
 
@@ -20,14 +22,14 @@ from eval import (
 ###################################
 DEFAULT_GT_DATASET_MAP = {
     "lolv1": "lolv1",
-    "lol_v1": "lolv1",
+    "lol_v1": "lol_v1",
     "lol_v2_real": "lol_v2_real",
     "lolv2_real": "lol_v2_real",
     "lol_v2_syn": "lol_v2_syn",
     "lolv2_syn": "lol_v2_syn",
 }
 
-DEFAULT_BATCH_NO_REFERENCE_METRICS = ("niqe", "nrqm", "brisque")
+DEFAULT_BATCH_NO_REFERENCE_METRICS = DEFAULT_NO_REFERENCE_METRICS
 
 
 ###################################
@@ -82,7 +84,11 @@ def evaluate_reference_method(method_dir, gt_dir, metrics, metric_names=DEFAULT_
     common_keys = sorted(set(pred_dict.keys()) & set(gt_dict.keys()))
 
     if len(common_keys) == 0:
-        return {"num_images": 0, **{name: None for name in metric_names}}
+        return {
+            "num_images": 0,
+            **{name: None for name in metric_names},
+            **{f"{name}_std": None for name in metric_names},
+        }
 
     metric_values = {name: [] for name in metric_names}
 
@@ -104,6 +110,7 @@ def evaluate_reference_method(method_dir, gt_dir, metrics, metric_names=DEFAULT_
     return {
         "num_images": len(common_keys),
         **{name: safe_mean(metric_values[name]) for name in metric_names},
+        **{f"{name}_std": safe_std(metric_values[name]) for name in metric_names},
     }
 
 
@@ -148,16 +155,24 @@ def evaluate_reference_root(
                 "method": method_name,
                 "num_images": result["num_images"],
                 **{name: format_metric(result[name]) for name in metric_names},
+                **{f"{name}_std": format_metric(result[f"{name}_std"]) for name in metric_names},
             }
             rows.append(row)
 
-            metric_text = " | ".join(f"{name}={row[name]}" for name in metric_names)
+            metric_text = " | ".join(
+                f"{name}={row[name]} ± {row[f'{name}_std']}"
+                for name in metric_names
+            )
             print(
                 f"[REFERENCE] dataset={dataset_name} | method={method_name} | "
                 f"images={row['num_images']} | {metric_text}"
             )
 
-        headers = ["method", "num_images", *metric_names]
+        headers = [
+            "method",
+            "num_images",
+            *[item for name in metric_names for item in (name, f"{name}_std")],
+        ]
         print(f"\nREFERENCE SUMMARY: {dataset_name}")
         print_table(headers, rows)
 
@@ -169,11 +184,32 @@ def evaluate_reference_root(
 # NO-REFERENCE EVALUATION
 ###################################
 @torch.no_grad()
-def evaluate_no_reference_method(method_dir, metrics, metric_names=DEFAULT_BATCH_NO_REFERENCE_METRICS):
+def evaluate_no_reference_method(
+    method_dir,
+    metrics,
+    metric_names=DEFAULT_BATCH_NO_REFERENCE_METRICS,
+    input_dir=None,
+):
     files = list_images(method_dir)
 
     if len(files) == 0:
-        return {"num_images": 0, **{name: None for name in metric_names}}
+        return {
+            "num_images": 0,
+            **{name: None for name in metric_names},
+            **{f"{name}_std": None for name in metric_names},
+        }
+
+    use_loe = "loe" in metric_names
+    input_dict = None
+
+    if use_loe:
+        if not input_dir:
+            raise ValueError(
+                "LOE requires the original low-light images for each no-reference dataset."
+            )
+        if not os.path.isdir(input_dir):
+            raise RuntimeError(f"LOE input folder not found: {input_dir}")
+        input_dict = build_stem_to_file_dict(input_dir)
 
     metric_values = {name: [] for name in metric_names}
 
@@ -181,12 +217,35 @@ def evaluate_no_reference_method(method_dir, metrics, metric_names=DEFAULT_BATCH
         img_path = os.path.join(method_dir, filename)
         img = to_tensor(load_image_rgb(img_path))
 
+        original = None
+        if use_loe:
+            stem = os.path.splitext(filename)[0]
+            if stem not in input_dict:
+                raise RuntimeError(
+                    f"No matching original low-light image found for LOE: {filename}"
+                )
+
+            original_path = os.path.join(input_dir, input_dict[stem])
+            original = to_tensor(load_image_rgb(original_path))
+
+            if img.shape != original.shape:
+                raise ValueError(
+                    f"LOE shape mismatch for {filename}: "
+                    f"{tuple(img.shape)} vs {tuple(original.shape)}"
+                )
+
         for metric_name in metric_names:
-            metric_values[metric_name].append(metrics[metric_name](img).item())
+            if metric_name == "loe":
+                metric_values[metric_name].append(
+                    metrics[metric_name](original, img).item()
+                )
+            else:
+                metric_values[metric_name].append(metrics[metric_name](img).item())
 
     return {
         "num_images": len(files),
         **{name: safe_mean(metric_values[name]) for name in metric_names},
+        **{f"{name}_std": safe_std(metric_values[name]) for name in metric_names},
     }
 
 
@@ -194,6 +253,7 @@ def evaluate_no_reference_root(
     no_reference_root,
     save_root,
     metric_names=DEFAULT_BATCH_NO_REFERENCE_METRICS,
+    input_root="",
 ):
     if not os.path.isdir(no_reference_root):
         print(f"[Skip] No-reference root not found: {no_reference_root}")
@@ -202,37 +262,63 @@ def evaluate_no_reference_root(
     print(f"\nUsing device: {DEVICE}")
     print("Running NO-REFERENCE batch evaluation")
 
+    if "loe" in metric_names and not input_root:
+        raise ValueError(
+            "LOE requires the original low-light dataset root. "
+            "Provide input_root (CLI: --input-root), organized as "
+            "input_root/dataset_name/images."
+        )
+
     metrics = init_no_reference_metrics(metric_names)
     dataset_names = list_subdirs(no_reference_root)
 
     for dataset_name in dataset_names:
         dataset_dir = os.path.join(no_reference_root, dataset_name)
+        input_dir = os.path.join(input_root, dataset_name) if input_root else None
         method_names = list_subdirs(dataset_dir)
 
         if len(method_names) == 0:
             print(f"[Skip] No method folders in: {dataset_dir}")
             continue
 
+        if "loe" in metric_names and not os.path.isdir(input_dir):
+            raise RuntimeError(
+                f"LOE input folder not found for dataset '{dataset_name}': {input_dir}"
+            )
+
         rows = []
 
         for method_name in method_names:
             method_dir = os.path.join(dataset_dir, method_name)
-            result = evaluate_no_reference_method(method_dir, metrics, metric_names)
+            result = evaluate_no_reference_method(
+                method_dir,
+                metrics,
+                metric_names,
+                input_dir=input_dir,
+            )
 
             row = {
                 "method": method_name,
                 "num_images": result["num_images"],
                 **{name: format_metric(result[name]) for name in metric_names},
+                **{f"{name}_std": format_metric(result[f"{name}_std"]) for name in metric_names},
             }
             rows.append(row)
 
-            metric_text = " | ".join(f"{name}={row[name]}" for name in metric_names)
+            metric_text = " | ".join(
+                f"{name}={row[name]} ± {row[f'{name}_std']}"
+                for name in metric_names
+            )
             print(
                 f"[NO-REFERENCE] dataset={dataset_name} | method={method_name} | "
                 f"images={row['num_images']} | {metric_text}"
             )
 
-        headers = ["method", "num_images", *metric_names]
+        headers = [
+            "method",
+            "num_images",
+            *[item for name in metric_names for item in (name, f"{name}_std")],
+        ]
         print(f"\nNO-REFERENCE SUMMARY: {dataset_name}")
         print_table(headers, rows)
 
@@ -251,11 +337,12 @@ def multiple_dataset_infer(
     gt_dataset_map=None,
     reference_metrics=DEFAULT_REFERENCE_METRICS,
     no_reference_metrics=DEFAULT_BATCH_NO_REFERENCE_METRICS,
+    input_root="",
 ):
     """
     Run multi-dataset evaluation for reference and/or no-reference LLIE results.
 
-    Expected folder structure:
+    Expected result folder structure:
 
     results_root/
         reference/
@@ -266,6 +353,12 @@ def multiple_dataset_infer(
             dataset_name/
                 method_name/
                     image files
+
+    For LOE only, original low-light images are read from:
+
+    input_root/
+        dataset_name/
+            image files
     """
     mode = mode.replace("-", "_")
 
@@ -285,6 +378,7 @@ def multiple_dataset_infer(
     print(f"Device       : {DEVICE}")
     print(f"Results root : {results_root}")
     print(f"GT root      : {gt_root if gt_root else '(not provided)'}")
+    print(f"Input root   : {input_root if input_root else '(not provided)'}")
     print(f"Save root    : {save_root}")
     print(f"Mode         : {mode}")
     print("=" * 80)
@@ -306,6 +400,7 @@ def multiple_dataset_infer(
             no_reference_root=no_reference_root,
             save_root=save_root,
             metric_names=no_reference_metrics,
+            input_root=input_root,
         )
 
     print("\nDone.")
