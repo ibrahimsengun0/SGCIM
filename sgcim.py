@@ -97,9 +97,9 @@ def compute_score(v):
     contrast = np.clip(contrast / 0.1, 0.0, 1.0)
 
     score = (
-        0.3 * (1.0 - brightness) +
-        0.3 * (1.0 - entropy) +
-        0.4 * (1.0 - contrast)
+        0.5 * (1.0 - brightness) +
+        0.2 * (1.0 - entropy) +
+        0.3 * (1.0 - contrast)
     )
 
     return float(np.clip(score, 0.0, 1.0))
