@@ -11,8 +11,7 @@ Low-light image enhancement (LLIE) aims to improve visibility in poorly illumina
 
 # Method Pipeline
 
-![method](figures\method.png)
-
+![Method Pipeline](figures/method.png)
 
 
 ---
