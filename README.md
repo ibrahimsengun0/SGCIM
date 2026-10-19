@@ -120,23 +120,9 @@ For reproducibility and detailed visual comparison, all enhancement results are 
 ![visual_ref_comp](figures/comp_ref.png)
 
 
-## Quantitative Results on Referenced Low-Light Datasets
+## Quantitative Results on Referenced and No Reference Low-Light Datasets
 
-| Dataset | PSNR ↑ | SSIM ↑ | LPIPS ↓ |
-|---|---:|---:|---:|
-| LoLV1 | - | - | - |
-| LoLV2 Real | - | - | - |
-| LoLV2 Syn | - | - | - |
-
-
-## Quantitative Results on No-Reference Low-Light Datasets
-
-| Dataset | NIQE ↓ | NRQM ↑ | MUSIQ ↑ | BRISQUE ↓ |
-|---|---:|---:|---:|---:|
-| LIME | - | - | - | - |
-| DICM | - | - | - | - |
-| MEF | - | - | - | - |
-| NPE | - | - | - | - |
+![sgcim_results](figures/sgcim_results.png)
 
 ---
 
