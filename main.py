@@ -25,8 +25,8 @@ Examples:
   # Evaluate enhanced images against ground truth
   python main.py eval-single --output results/edlr --gt data/high --csv eval_csv/edlr_ref.csv
 
-  # Evaluate enhanced images without ground truth
-  python main.py eval-single --output results/edlr --mode no_reference --csv eval_csv/edlr_nr.csv
+  # Evaluate enhanced images without ground truth, including LOE
+  python main.py eval-single --output results/edlr --input data/low --mode no_reference --csv eval_csv/edlr_nr.csv
 
   # Enhance then evaluate in one command
   python main.py pipeline --input data/low --output results/edlr --gt data/high --csv eval_csv/edlr_ref.csv
@@ -34,10 +34,11 @@ Examples:
   # Batch evaluation layout:
   # results_root/reference/dataset_name/method_name/images
   # results_root/no_reference/dataset_name/method_name/images
-  python main.py eval-batch --results-root results_root --gt-root gt_root --save-root eval_csv --mode all
+  # input_root/dataset_name/images  (original low-light images used only by LOE)
+  python main.py eval-batch --results-root results_root --gt-root gt_root --input-root input_root --save-root eval_csv --mode all
 
   # Batch evaluation with custom GT mapping
-  python main.py eval-batch --results-root results_root --gt-root gt_root --map my_dataset=lolv1
+  python main.py eval-batch --results-root results_root --gt-root gt_root --input-root input_root --map my_dataset=lolv1
 """
 
 
@@ -104,6 +105,7 @@ def run_eval_single(args):
             output_path=args.output,
             csv_save_path=args.csv,
             metric_names=parse_metric_list(args.nr_metrics, DEFAULT_NO_REFERENCE_METRICS),
+            input_path=args.input,
         )
     else:
         raise ValueError("Invalid eval-single mode. Use auto, reference, or no_reference.")
@@ -118,6 +120,7 @@ def run_eval_batch(args):
         gt_dataset_map=parse_gt_dataset_map(args.map),
         reference_metrics=parse_metric_list(args.ref_metrics, DEFAULT_REFERENCE_METRICS),
         no_reference_metrics=parse_metric_list(args.nr_metrics, DEFAULT_BATCH_NO_REFERENCE_METRICS),
+        input_root=args.input_root,
     )
 
 
@@ -149,6 +152,7 @@ def run_pipeline(args):
             output_path=args.output,
             csv_save_path=args.csv,
             metric_names=parse_metric_list(args.nr_metrics, DEFAULT_NO_REFERENCE_METRICS),
+            input_path=args.input,
         )
     elif mode == "none":
         print("Pipeline enhancement finished. Evaluation skipped.")
@@ -180,6 +184,11 @@ def build_parser():
     eval_single_parser = subparsers.add_parser("eval-single", help="Evaluate one output folder.")
     eval_single_parser.add_argument("--output", required=True, help="Folder containing enhanced/output images.")
     eval_single_parser.add_argument("--gt", default="", help="Ground-truth folder for reference metrics.")
+    eval_single_parser.add_argument(
+        "--input",
+        default="",
+        help="Original low-light folder used by LOE in no-reference evaluation.",
+    )
     eval_single_parser.add_argument("--csv", default=None, help="Optional CSV save path.")
     eval_single_parser.add_argument(
         "--mode",
@@ -191,19 +200,24 @@ def build_parser():
         "--ref-metrics",
         nargs="*",
         default=None,
-        help="Reference metrics to compute. Default: psnr ssim lpips",
+        help="Reference metrics to compute. Default: psnr ssim lpips ciede2000",
     )
     eval_single_parser.add_argument(
         "--nr-metrics",
         nargs="*",
         default=None,
-        help="No-reference metrics to compute. Default: niqe nrqm brisque musiq",
+        help="No-reference metrics to compute. Default: niqe nrqm brisque loe",
     )
     eval_single_parser.set_defaults(func=run_eval_single)
 
     eval_batch_parser = subparsers.add_parser("eval-batch", help="Evaluate multiple datasets/methods.")
     eval_batch_parser.add_argument("--results-root", required=True, help="Root folder containing reference/ and/or no_reference/.")
     eval_batch_parser.add_argument("--gt-root", default="", help="GT root folder for reference datasets.")
+    eval_batch_parser.add_argument(
+        "--input-root",
+        default="",
+        help="Original low-light root for LOE, organized as input_root/dataset_name/images.",
+    )
     eval_batch_parser.add_argument("--save-root", default="eval_csv", help="Folder where CSV summaries are saved.")
     eval_batch_parser.add_argument(
         "--mode",
@@ -221,13 +235,13 @@ def build_parser():
         "--ref-metrics",
         nargs="*",
         default=None,
-        help="Reference metrics to compute. Default: psnr ssim lpips",
+        help="Reference metrics to compute. Default: psnr ssim lpips ciede2000",
     )
     eval_batch_parser.add_argument(
         "--nr-metrics",
         nargs="*",
         default=None,
-        help="No-reference metrics to compute. Default: niqe nrqm brisque",
+        help="No-reference metrics to compute. Default: niqe nrqm brisque loe",
     )
     eval_batch_parser.set_defaults(func=run_eval_batch)
 
@@ -245,13 +259,13 @@ def build_parser():
         "--ref-metrics",
         nargs="*",
         default=None,
-        help="Reference metrics to compute. Default: psnr ssim lpips",
+        help="Reference metrics to compute. Default: psnr ssim lpips ciede2000",
     )
     pipeline_parser.add_argument(
         "--nr-metrics",
         nargs="*",
         default=None,
-        help="No-reference metrics to compute. Default: niqe nrqm brisque musiq",
+        help="No-reference metrics to compute. Default: niqe nrqm brisque loe",
     )
     pipeline_parser.set_defaults(func=run_pipeline)
 
