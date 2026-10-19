@@ -4,6 +4,9 @@
 # Abstract
 
 Low-light image enhancement (LLIE) aims to improve visibility in poorly illuminated scenes, where compressed dynamic range and weak contrast obscure image content. In this work, we present Statistics-Guided Chroma and Intensity Modulation (SGCIM), a training-free method that coordinates intensity and chroma adjustment through a single image-dependent degradation score. The score combines brightness, entropy, and contrast statistics computed from the HSV value channel. An exponential mapping determines the gamma exponent for a power-law transformation applied after percentile-based contrast stretching. The same score controls saturation scaling, while the original hue is preserved. Experiments on three paired benchmarks show higher mean PSNR and lower mean LPIPS than the evaluated classical baselines. On five no-reference benchmarks, SGCIM preserves input lightness ordering more closely than the evaluated recent methods and obtains favorable NRQM and BRISQUE results on several datasets. SGCIM also demonstrates competitive computational efficiency in CPU-based processing.
+
+
+
 ---
 
 # Method Pipeline
