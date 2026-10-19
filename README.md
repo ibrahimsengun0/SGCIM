@@ -110,7 +110,7 @@ Click the usage name in the first column to jump to the related sample command.
 ---
 # Results
 
-For reproducibility and detailed visual comparison, all enhancement results are publicly available at: [google_drive](https://drive.google.com/drive/folders/1RiaRJIVir0bhQj_gd0BExj2iuwgOjdeg?usp=sharing)
+For reproducibility and detailed visual comparison, all enhancement results are publicly available at: [google_drive](https://drive.google.com/drive/folders/1vpWjKBX5DLhNF8KpB_2uUfImgvH7wVdW?usp=drive_link)
 
 
 
